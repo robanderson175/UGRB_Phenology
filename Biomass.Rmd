@@ -1,0 +1,277 @@
+---
+title: "Biomass"
+output: html_document
+date: '2023-04-17'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(TDPanalysis)
+# read data and add functional type
+bmassorig <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/2022_Data_Entry/Biomass_Data/Biomass_Data_Entry.csv")
+spcode <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Important_Sheets/Species_Codes.csv")
+bmass <- merge(bmassorig, spcode, by = "Species")
+bmass <- bmass[,-c(6,7,11,13,15,22,23)]
+
+# Add DOY
+dates <- bmass$Date
+dates2 <- as.Date(dates, "%m/%d/%Y")
+dates3 <- format(dates2, "%m/%d/%Y")
+DOY<-date.to.DOY(dates=dates3, format = "mm/dd/yyyy")
+bmass$DOY <- DOY
+bmass$DOY[bmass$Week==1]<-median(bmass$DOY[bmass$Week==1])
+bmass$DOY[bmass$Week==2]<-median(bmass$DOY[bmass$Week==2])
+bmass$DOY[bmass$Week==3]<-median(bmass$DOY[bmass$Week==3])
+bmass$DOY[bmass$Week==4]<-median(bmass$DOY[bmass$Week==4])
+bmass$DOY[bmass$Week==5]<-median(bmass$DOY[bmass$Week==5])
+
+bmass$Total_Biomass_per_Basal <- bmass$Total_Biomass/bmass$Basal_Area
+bmass$Total_Green_Biomass_per_Basal <- bmass$Total_Green_Biomass/bmass$Basal_Area
+```
+# Plot biomass
+```{r}
+# Set colors for plotting
+cols <- c("Large C3" = "#56B4E9", "Small C3" = "forestgreen", "C4" = "#E69F00", "Forb" = "#F0E442")
+my.breaks.minor2 <- c(120, 150, 180, 210)
+my.breaks.major2 <- c(90, 105, 135, 165, 195)
+my.breaks.comb2 <- sort(c(my.breaks.major2, my.breaks.minor2 - 1.0E-6))
+month.label2 <- c(90, "\nApril", 120, "\nMay", 150, "\nJune", 180, 
+                "\nJuly", 210)
+
+bmassplot <- ggplot(bmass, aes(x=DOY, y = Total_Green_Biomass_per_Basal, color = Functional_Type))+
+  #geom_smooth(method = "gam", formula = y ~ s(x, bs = "cs"))+
+  stat_smooth()+
+  scale_colour_manual(values = cols)+
+  #ggtitle("Green Biomass/Basal Area")+
+  xlab("Day of Year (DOY)")+
+  ylab(expression("Green Biomass/Basal Area (g/cm"^2*")"))+
+  theme_bw(base_size = 15)+
+  theme(axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 20),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        legend.text = element_text(size=24),
+        legend.title = element_blank())+
+  xlim(110,180)+
+  #scale_x_continuous(expand = c(0,0), limits = c(110,180), minor_breaks = my.breaks.minor2, labels = month.label2, breaks = my.breaks.comb2)+
+  labs(color="Functional Type")
+```
+# Updated Plots
+```{r}
+# Turn week to average DOY
+weekstats2<-bmass %>%
+  group_by(Week) %>%
+  summarize(mean = mean(DOY))
+weekstatsdf2 <- as.data.frame(round(weekstats2))
+colnames(weekstatsdf2) <- c("Week", "Avg_DOY")
+bmass2 <- left_join(bmass, weekstatsdf2, by="Week")
+
+# Create plot of Heights by Functional Type
+bmassstats <- bmass2[!is.na(bmass2$Total_Green_Biomass_per_Basal),] %>%   
+  group_by(Avg_DOY, Functional_Type) %>%  
+  summarize(mean_bmass=mean(Total_Green_Biomass_per_Basal/10000),  
+            sd_bmass=sd(Total_Green_Biomass_per_Basal/10000),  
+            N_bmass=n(),  
+            se_bmass=sd_bmass/sqrt(N_bmass),  
+            upper_limit_bmass=mean_bmass+se_bmass,  
+            lower_limit_bmass=mean_bmass-se_bmass
+  )  
+
+bmassplot <- ggplot(bmassstats, aes(x=Avg_DOY, y=mean_bmass, colors = Functional_Type)) +  
+  geom_ribbon(aes(y = mean_bmass, ymin=lower_limit_bmass, ymax=upper_limit_bmass, fill = Functional_Type), alpha = .5)+
+  geom_line(aes(color=Functional_Type), linewidth=0.8) +
+  scale_colour_manual(aesthetics = c("colour", "fill"),values = cols)+
+  ggtitle("")+
+  xlab("Day of Year (DOY)")+
+  ylab(expression("Green Biomass/Basal Area (g/m"^2*")"))+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(108,182), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(color="Functional Type", fill="Functional Type")
+
+```
+
+
+# Derivative of biomass
+```{r}
+# Library
+require(splines)
+library(gam)
+# large C3 derivative
+largec3bmass<- bmass[bmass$Functional_Type=="Large C3",]
+lc3.lmdf <- (largec3bmass)
+lc3.model <- gam((Total_Green_Biomass_per_Basal/10000)~s(DOY,df=6),data = lc3.lmdf)
+
+lc3.X <- data.frame(DOY = sort(unique(lc3.lmdf$DOY))) # make an ordered sequence
+
+lc3.Y <- predict(lc3.model,newdata=lc3.X) # calculate predictions for that sequence
+plot(lc3.X$DOY,lc3.Y,type="l",main="Original fit") #check
+
+lc3.dY <- diff(lc3.Y)/diff(lc3.X$DOY)  # the derivative of your function
+lc3.dX <- rowMeans(embed(lc3.X$DOY,2)) # centers the X values for plotting
+plot(lc3.dX,lc3.dY,type="l",main="Derivative") #check
+
+lc3deriv <- as.data.frame(cbind(lc3.dX, lc3.dY))
+lc3deriv$Functional_Type <- "Large C3"
+names(lc3deriv) <- c("dX", "dY", "Functional_Type")
+
+# small C3 derivative
+smallc3bmass<- bmass[bmass$Functional_Type=="Small C3",]
+sc3.lmdf <- (smallc3bmass)
+sc3.model <- gam((Total_Green_Biomass_per_Basal/10000)~s(DOY,df=6),data = sc3.lmdf)
+
+sc3.X <- data.frame(DOY = sort(unique(sc3.lmdf$DOY))) # make an ordered sequence
+
+sc3.Y <- predict(sc3.model,newdata=sc3.X) # calculate predictions for that sequence
+plot(sc3.X$DOY,sc3.Y,type="l",main="Original fit") #check
+
+sc3.dY <- diff(sc3.Y)/diff(sc3.X$DOY)  # the derivative of your function
+sc3.dX <- rowMeans(embed(sc3.X$DOY,2)) # centers the X values for plotting
+plot(sc3.dX,sc3.dY,type="l",main="Derivative") #check
+
+sc3deriv <- as.data.frame(cbind(sc3.dX, sc3.dY))
+sc3deriv$Functional_Type <- "Small C3"
+names(sc3deriv) <- c("dX", "dY", "Functional_Type")
+
+# c4 derivative
+c4bmass<- bmass[bmass$Functional_Type=="C4",]
+c4.lmdf <- (c4bmass)
+c4.model <- gam((Total_Green_Biomass_per_Basal/10000)~s(DOY,df=6),data = c4.lmdf)
+
+c4.X <- data.frame(DOY = sort(unique(c4.lmdf$DOY))) # make an ordered sequence
+
+c4.Y <- predict(c4.model,newdata=c4.X) # calculate predictions for that sequence
+plot(c4.X$DOY,c4.Y,type="l",main="Original fit") #check
+
+c4.dY <- diff(c4.Y)/diff(c4.X$DOY)  # the derivative of your function
+c4.dX <- rowMeans(embed(c4.X$DOY,2)) # centers the X values for plotting
+plot(c4.dX,c4.dY,type="l",main="Derivative") #check
+
+c4deriv<-as.data.frame(cbind(c4.dX, c4.dY))
+c4deriv$Functional_Type <- "C4"
+names(c4deriv) <- c("dX", "dY", "Functional_Type")
+
+bmassderivs <- rbind(lc3deriv, sc3deriv, c4deriv)
+
+cols2 <- c("Large C3" = "#56B4E9", "Small C3" = "forestgreen", "C4" = "#E69F00", "forb" = "#F0E442")
+
+# Plot derivatives of green biomass
+bmassderiv <- ggplot(bmassderivs)+
+  geom_line(aes(x=dX, y = dY, color = Functional_Type),linewidth=1.5)+
+  scale_colour_manual(values = cols2)+
+  #ggtitle("Rate of Green Biomass Change")+
+  xlab("Day of Year (DOY)")+
+  ylab(expression("Green Biomass/Basal Area (g/m"^2*") Growth Rate"))+
+  theme_bw(base_size = 15)+
+  #theme(axis.text.x = element_text(size = 20),
+        # axis.text.y = element_text(size = 20),
+        # axis.title.x = element_text(size = 20),
+        # axis.title.y = element_text(size = 20),
+        # legend.text = element_text(size=24),
+        # legend.title = element_blank())+
+  scale_x_continuous(expand = c(0,0), limits = c(115,170), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)
+  labs(color="Functional Type")
+
+ggexport(phenplot,filename = "phen.jpeg", width = 1200, height = 768)
+
+bothbmass <- ggarrange(bmassplot, bmassderiv, ncol = 2, nrow = 1, common.legend = T, legend = "bottom", align = "hv")
+```
+# Compare total biomass contributions
+```{r}
+# Plot biomass of functional types
+bmassamount <- ggplot(bmass, aes(x=Functional_Type, y = Total_Green_Biomass))+
+  geom_boxplot(aes(fill = Functional_Type))+
+  scale_fill_manual(values = cols)+
+  coord_cartesian(ylim=c(0, 5))+
+  theme_bw(base_size = 15)+
+  #ggtitle("Annual Green Biomass")+
+  ylab("Green Biomass/Individual (g)")+
+  theme(axis.title.x = element_blank())+
+  labs(fill="Functional Type")
+  #geom_signif(comparisons = list(c("Large C3", "C4")), map_signif_level=TRUE)+
+  #geom_signif(comparisons = list(c("Large C3", "Small C3")), map_signif_level=TRUE)+
+  #geom_signif(comparisons = list(c("Small C3", "C4")), map_signif_level=TRUE)
+
+# Check assumptions of ANOVA - use log transformation of Total Green Biomass
+hist(log(bmass$Total_Green_Biomass))#[which(bmass$Functional_Type=="C4")]))
+# perform tukey test
+# create new df with only data greater than 0
+bmass2<-bmass[!(bmass$Total_Green_Biomass==0),]
+TukeyHSD(aov(log(Total_Green_Biomass) ~ Functional_Type, data = bmass2))
+```
+# biomass descriptive stats
+```{r}
+# large c3 bmass mean 1.46, sd 2.63, n 129
+format(stat.desc(bmass$Total_Green_Biomass[which(bmass$Functional_Type=="Large C3")]), scientific = F)
+# small c3 bmass mean 0.16, sd 0.20, n 119
+format(stat.desc(bmass$Total_Green_Biomass[which(bmass$Functional_Type=="Small C3")]), scientific = F)
+# small c3 bmass mean 0.30, sd 0.33, n 115
+format(stat.desc(bmass$Total_Green_Biomass[which(bmass$Functional_Type=="C4")]), scientific = F)
+```
+
+```{r}
+# put biomass plots together
+  bmassplots <- ggarrange(bmassplot, bmassderiv, bmassamount, nrow = 1, ncol = 3, common.legend = T, legend = "bottom", labels = c("(A)", "(B)", "(C)"),align = "hv", widths = c(1,1,1))
+
+ggsave("Bmass_Plots_Updated.png", plot=bmassplots, device = "png",path = "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Figures/", width = 35, height = 20, units = "cm")
+```
+
+
+# Compare percent green values
+```{r}
+# for large c3
+bmasslargec3 <- bmass[bmass$Functional_Type=="large_C3",]
+t.test(bmasslargec3$Actual_Perc_Green, bmasslargec3$Visual_Perc_Green) # not different, slightly overestimated visually
+
+# for small c3
+bmasssmallc3 <- bmass[bmass$Functional_Type=="small_C3",]
+t.test(bmasssmallc3$Actual_Perc_Green, bmasssmallc3$Visual_Perc_Green) # different, overestimated visually
+
+# for c4
+bmassc4 <- bmass[bmass$Functional_Type=="C4",]
+t.test(bmassc4$Actual_Perc_Green, bmassc4$Visual_Perc_Green) # just barely insignificant difference, overestimated visually
+
+```
+
+# Run regressions
+```{r}
+modeltest <- na.omit(bmasslargec3[,-7])
+
+plot(bmass[c(5:12,15)], pch = 19, col = "navyblue")
+bmass$Total_Biomass_log <- log(bmass$Total_Biomass)
+
+try1 <- lm(log(Total_Green_Biomass) ~ log(Diameter_Avg) * log(Height) * log(Visual_Perc_Green),data = modeltest)
+
+try2 <- (lm(log(Total_Green_Biomass) ~ log(Height) * log(Visual_Perc_Green),data = bmasslargec3))
+
+try3 <- (lm(log(Total_Green_Biomass) ~ log(Diameter_Avg) + log(Height) + log(Visual_Perc_Green),data = bmasslargec3))
+
+AIC(try1)
+AIC(try2)
+AIC(try3)
+
+plot(bmasslargec3$Diameter_Avg, bmasslargec3$Total_Biomass)
+```
+
+```{r}
+library(caret)
+ctrl <- trainControl(method = "cv", number = 5)
+bmassmodel <- train(Total_Biomass ~ Height + Diameter_Avg, data = bmasslargec3, method = "lm", trControl = ctrl)
+print(bmassmodel)
+(.511/2.05)*100
+
+
+# model selection, look for lowest CV (sd/mean)
+```
+
+```{r}
+#install.packages("MuMIn", type = "source")
+install.packages("https://cran.r-project.org/src/contrib/Archive/MuMIn/MuMIn_1.46.0.tar.gz", repos=NULL, type="source")
+library(MuMIn)
+options(na.action = "na.fail")
+dredge(try1)
+```
+

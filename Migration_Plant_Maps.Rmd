@@ -1,0 +1,301 @@
+---
+title: "Migration_Plant_Maps"
+output: html_document
+date: '2023-04-18'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+# Load packages
+library(raster)
+library(ggplot2)
+library(raster)
+library(rasterVis)
+library(rgdal)
+library(grid)
+library(scales)
+library(viridis)
+library(terra)
+library(ggthemes)
+library(colorspace)
+library(sf)
+
+# Establish Extent
+ugrb_extent<- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/UGRB.tif")
+xlimits<-c(xmin(ugrb_extent),xmax(ugrb_extent))
+ylimits<-c(ymin(ugrb_extent),ymax(ugrb_extent))
+
+
+```
+# Calculate current biomass in pathways
+```{r}
+# Read in current biomass rasters
+sage.current <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Current/sagebrush/M.Bmass.tif")
+c3.current <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Current/p.cool.grass/M.Bmass.tif")
+c4.current <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Current/p.warm.grass/M.Bmass.tif")
+af.current <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Current/a.forb/M.Bmass.tif")
+pf.current <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Current/p.forb/M.Bmass.tif")
+shrub.current <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Current/shrub/M.Bmass.tif")
+
+#read pathways
+paths <- readOGR("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Migration_Data/Full_Migration_Area/All_Migration_Corridores.shp")
+paths2 <- spTransform(paths, crs(sage.current))
+
+# Clip current bmass rasters to pathways
+sage.crop <- crop(sage.current, extent(paths2))
+sage.mask <- mask(sage.crop, paths2)
+c3.crop <- crop(c3.current, extent(paths2))
+c3.mask <- mask(c3.crop, paths2)
+c4.crop <- crop(c4.current, extent(paths2))
+c4.mask <- mask(c4.crop, paths2)
+af.crop <- crop(af.current, extent(paths2))
+af.mask <- mask(af.crop, paths2)
+pf.crop <- crop(pf.current, extent(paths2))
+pf.mask <- mask(pf.crop, paths2)
+shrub.crop <- crop(shrub.current, extent(paths2))
+shrub.mask <- mask(shrub.crop, paths2)
+
+# find mean of each
+cellStats(sage.mask, stat = "mean") #628.577
+cellStats(c3.mask, stat = "mean") #69.24678
+cellStats(c4.mask, stat = "mean") #39.90568
+cellStats(af.mask, stat = "mean") #6.0362
+cellStats(pf.mask, stat = "mean") #18.35656
+cellStats(shrub.mask, stat = "mean") #8.339186
+
+
+# Read in mid biomass rasters
+sage.mid <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Mid/RCP45/sagebrush/M.M.Bmass.tif")
+c3.mid <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Mid/RCP45/p.cool.grass/M.M.Bmass.tif")
+c4.mid <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Mid/RCP45/p.warm.grass/M.M.Bmass.tif")
+af.mid <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Mid/RCP45/a.forb/M.M.Bmass.tif")
+pf.mid <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Mid/RCP45/p.forb/M.M.Bmass.tif")
+shrub.mid <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/STEPWAT/FINAL_OUTPUTS/Interpolation_Rasters/Mid/RCP45/shrub/M.M.Bmass.tif")
+
+# Clip mid RCP45 bmass rasters to pathways
+sage.crop.mid <- crop(sage.mid, extent(paths2))
+sage.mask.mid <- mask(sage.crop.mid, paths2)
+c3.crop.mid <- crop(c3.mid, extent(paths2))
+c3.mask.mid <- mask(c3.crop.mid, paths2)
+c4.crop.mid <- crop(c4.mid, extent(paths2))
+c4.mask.mid <- mask(c4.crop.mid, paths2)
+af.crop.mid <- crop(af.mid, extent(paths2))
+af.mask.mid <- mask(af.crop.mid, paths2)
+pf.crop.mid <- crop(pf.mid, extent(paths2))
+pf.mask.mid <- mask(pf.crop.mid, paths2)
+shrub.crop.mid <- crop(shrub.mid, extent(paths2))
+shrub.mask.mid <- mask(shrub.crop.mid, paths2)
+
+# Find percent increase across migration paths
+cellStats((sage.mask.mid/sage.mask)*100, stat = "mean") # 21.1%
+cellStats((c3.mask.mid/c3.mask)*100, stat = "mean") # 2.73%
+cellStats((c4.mask.mid/c4.mask)*100, stat = "mean") # 8.86%
+cellStats((af.mask.mid/af.mask)*100, stat = "mean") # 0.65%
+cellStats((pf.mask.mid/pf.mask)*100, stat = "mean") # 1.92%
+cellStats((shrub.mask.mid/shrub.mask)*100, stat = "mean") # 2.83%
+
+# Make binary increase/decrease rasters and clip current rasters to those areas that increase
+sage.binary <- sage.mask.mid
+sage.binary[sage.binary < 0] <- 0
+sage.binary[sage.binary > 0] <- 1
+current.sage.increase <- sage.mask * sage.binary
+
+c3.binary <- c3.mask.mid
+c3.binary[c3.binary < 0] <- 0
+c3.binary[c3.binary > 0] <- 1
+current.c3.increase <- c3.mask * c3.binary
+
+c4.binary <- c4.mask.mid
+c4.binary[c4.binary < 0] <- 0
+c4.binary[c4.binary > 0] <- 1
+current.c4.increase <- c4.mask * c4.binary
+
+af.binary <- af.mask.mid
+af.binary[af.binary < 0] <- 0
+af.binary[af.binary > 0] <- 1
+current.af.increase <- af.mask * af.binary
+
+pf.binary <- pf.mask.mid
+pf.binary[pf.binary < 0] <- 0
+pf.binary[pf.binary > 0] <- 1
+current.pf.increase <- pf.mask * pf.binary
+
+shrub.binary <- shrub.mask.mid
+shrub.binary[shrub.binary < 0] <- 0
+shrub.binary[shrub.binary > 0] <- 1
+current.shrub.increase <- shrub.mask * shrub.binary
+
+
+# Find current averages for areas that will increase
+cellStats(current.sage.increase, stat = "mean") # 301.7863
+cellStats(current.c3.increase, stat = "mean") #45.26281
+cellStats(current.c4.increase, stat = "mean") #25.17441
+cellStats(current.af.increase, stat = "mean") #3.639035
+cellStats(current.pf.increase, stat = "mean") #12.48112
+cellStats(current.shrub.increase, stat = "mean") #5.063772
+```
+
+
+# Make plots
+# Main plots
+```{r}
+## C3 RCP45 Mid
+c3MP <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Misc/Interpolation_Rasters_Clipped/C3_MP.tif")
+
+# Plotting in ggplot
+c3MP.points<-rasterToPoints(c3MP, spatial = TRUE)
+c3MP.df <- data.frame(c3MP.points)
+
+c3MP.map<-ggplot(c3MP.df)+
+  geom_tile(aes(x=x, y=y, fill = C3_MP))+
+  coord_sf(xlim = xlimits, ylim = ylimits)+
+  labs(fill = "")+
+  scale_fill_continuous_diverging(palette = "Purple-Green")+
+  labs(title = expression(Delta ~ "C3 Grass Biomass (g/m"^2*")"))+
+  xlab("")+
+  ylab("")+
+  theme_bw()+
+  theme(plot.title = element_text(size=14))+
+  theme(legend.position = c(0.89,0.79))+
+  theme(legend.key.size = unit(0.53,'cm'))
+
+#averages
+mean(c3MP.df$C3_MP) #1.812162
+mean(c3MP.df$C3_MP[c3MP.df$C3_MP > 0]) #3.190966
+
+## C4 RCP45 Mid
+c4MP <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Misc/Interpolation_Rasters_Clipped/C4_MP.tif")
+
+# Plotting in ggplot
+c4MP.points<-rasterToPoints(c4MP, spatial = TRUE)
+c4MP.df <- data.frame(c4MP.points)
+
+c4MP.map<-ggplot(c4MP.df)+
+  geom_tile(aes(x=x, y=y, fill = C4_MP))+
+  coord_sf(xlim = xlimits, ylim = ylimits)+
+  labs(fill = "")+
+  scale_fill_continuous_diverging(palette = "Purple-Green")+
+  labs(title = expression(Delta ~ "C4 Grass Biomass (g/m"^2*")"))+
+  xlab("")+
+  ylab("")+
+  theme_bw()+
+  theme(plot.title = element_text(size=14))+
+  theme(legend.position = c(0.89,0.79))+
+  theme(legend.key.size = unit(0.53,'cm'))
+
+#averages
+mean(c4MP.df$C4_MP) #3.07511
+mean(c4MP.df$C4_MP[c4MP.df$C4_MP > 0]) #5.210871
+
+## sagebrush RCP45 Mid
+sageMP <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Misc/Interpolation_Rasters_Clipped/Sagebrush_MP.tif")
+
+# Plotting in ggplot
+sageMP.points<-rasterToPoints(sageMP, spatial = TRUE)
+sageMP.df <- data.frame(sageMP.points)
+
+sageMP.map<-ggplot(sageMP.df)+
+  geom_tile(aes(x=x, y=y, fill = Sagebrush_MP))+
+  coord_sf(xlim = xlimits, ylim = ylimits)+
+  labs(fill = "")+
+  scale_fill_continuous_diverging(palette = "Purple-Green")+
+  labs(title = expression(Delta ~ "Big Sagebrush Biomass (g/m"^2*")"))+
+  xlab("")+
+  ylab("")+
+  theme_bw()+
+  theme(plot.title = element_text(size=14))+
+  theme(legend.position = c(0.89,0.79))+
+  theme(legend.key.size = unit(0.53,'cm'))
+
+#averages
+mean(sageMP.df$Sagebrush_MP) #92.85733
+mean(sageMP.df$Sagebrush_MP[sageMP.df$Sagebrush_MP > 0]) #208.6627
+```
+
+# Secondary plots
+```{r}
+## aforb RCP45 Mid
+AFMP <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Misc/Interpolation_Rasters_Clipped/AForb_MP.tif")
+
+# Plotting in ggplot
+AFMP.points<-rasterToPoints(AFMP, spatial = TRUE)
+AFMP.df <- data.frame(AFMP.points)
+
+AFMP.map<-ggplot(AFMP.df)+
+  geom_tile(aes(x=x, y=y, fill = AForb_MP))+
+  coord_sf(xlim = xlimits, ylim = ylimits)+
+  labs(fill = "")+
+  scale_fill_continuous_diverging(palette = "Purple-Green")+
+  labs(title = expression(Delta ~ "Annual Forb Biomass (g/m"^2*")"))+
+  xlab("")+
+  ylab("")+
+  theme_bw()+
+  theme(plot.title = element_text(size=14))+
+  theme(legend.position = c(0.89,0.79))+
+  theme(legend.key.size = unit(0.53,'cm'))
+
+#averages
+mean(AFMP.df$AForb_MP) #0.03363111
+mean(AFMP.df$AForb_MP[AFMP.df$AForb_MP > 0]) #0.3165211
+
+## pforb RCP45 Mid
+PFMP <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Misc/Interpolation_Rasters_Clipped/PForb_MP.tif")
+
+# Plotting in ggplot
+PFMP.points<-rasterToPoints(PFMP, spatial = TRUE)
+PFMP.df <- data.frame(PFMP.points)
+
+PFMP.map<-ggplot(PFMP.df)+
+  geom_tile(aes(x=x, y=y, fill = PForb_MP))+
+  coord_sf(xlim = xlimits, ylim = ylimits)+
+  labs(fill = "")+
+  scale_fill_continuous_diverging(palette = "Purple-Green")+
+  labs(title = expression(Delta ~ "Perennial Forb Biomass (g/m"^2*")"))+
+  xlab("")+
+  ylab("")+
+  theme_bw()+
+  theme(plot.title = element_text(size=14))+
+  theme(legend.position = c(0.89,0.79))+
+  theme(legend.key.size = unit(0.53,'cm'))
+
+#averages
+mean(PFMP.df$PForb_MP) #0.3266277
+mean(PFMP.df$PForb_MP[PFMP.df$PForb_MP > 0]) #0.686571
+
+## other shrub RCP45 Mid
+shrubMP <- raster("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Misc/Interpolation_Rasters_Clipped/Shrub_MP.tif")
+
+# Plotting in ggplot
+shrubMP.points<-rasterToPoints(shrubMP, spatial = TRUE)
+shrubMP.df <- data.frame(shrubMP.points)
+
+shrubMP.map<-ggplot(shrubMP.df)+
+  geom_tile(aes(x=x, y=y, fill = Shrub_MP))+
+  coord_sf(xlim = xlimits, ylim = ylimits)+
+  labs(fill = "")+
+  scale_fill_continuous_diverging(palette = "Purple-Green")+
+  labs(title = expression(Delta ~ "Shrub Biomass (g/m"^2*")"))+
+  xlab("")+
+  ylab("")+
+  theme_bw()+
+  theme(plot.title = element_text(size=14))+
+  theme(legend.position = c(0.89,0.79))+
+  theme(legend.key.size = unit(0.53,'cm'))
+
+#averages
+mean(shrubMP.df$Shrub_MP) #0.2167058
+mean(shrubMP.df$Shrub_MP[shrubMP.df$Shrub_MP > 0]) #0.4606887
+```
+
+```{r}
+# Combine functional types we want
+# Combine all plots into one
+mainfigMP<-ggarrange(sageMP.map, c3MP.map, c4MP.map, AFMP.map, PFMP.map, shrubMP.map, nrow=2, ncol=3,common.legend = F, labels = c("(A)", "(B)", "(C)", "(D)", "(E)", "(F)"), align = "hv")#, vjust = c(12,12,12,12,12))
+
+
+ggsave("Migration_Plants_Full.png", plot=mainfigMP, device = "png",path = "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Figures/", width = 35, height = 25, units = "cm")
+#ggexport(mainfigMP,filename = "main.veg.migration.tiff", width = 1024, height = 768)
+
+```
+

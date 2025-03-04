@@ -1,0 +1,626 @@
+---
+title: "Phenology"
+output: html_document
+date: '2023-04-05'
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(TDPanalysis)
+library(readxl)
+library(mgcv)
+library(reshape2)
+# phen <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/2022_Data_Entry/Phenology_Data/Phenology_Data_Entry_Edited_Cleaned_Transposed.csv")
+# phen$Height<- as.numeric(phen$Height)
+# 
+# phen_clean <- phen[!(is.na(phen$Phenology_Stage)),]# & !(is.na(phen$Height)) & !(is.na(phen$Perc_Green)),]
+# 
+# write.csv(phen_clean,"C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/2022_Data_Entry/Phenology_Data/Final_Phenology.csv")
+```
+# Set up data
+```{r}
+# Add functional type to data
+phen_base <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/2022_Data_Entry/Phenology_Data/Final_Phenology.csv")
+getspnum <- read_xlsx("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/2022_Data_Entry/Phenology_Data/Phenology_Data_Entry_Edited_Cleaned.xlsx")
+getspnum <- as.data.frame(getspnum)
+table(getspnum$Species)
+spcode <- read.csv("C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Important_Sheets/Species_Codes.csv")
+phen <- merge(phen_base, spcode, by = "Species")
+phen <- phen[,-c(10,12,13)]
+
+# add DOY
+dates <- phen$Date
+dates2 <- as.Date(dates, "%m/%d/%Y")
+dates3 <- format(dates2, "%m/%d/%Y")
+DOY<-date.to.DOY(dates=dates3, format = "mm/dd/yyyy")
+phen$DOY <- DOY
+
+# add column specifying plant individual
+phen$Plant_Obs <- paste(phen$Site, phen$Nail_Num)
+
+#remove sedge
+phen <- phen[!phen$Functional_Type=="sedge",]
+
+# Add site type / C4 presence column
+C4Sites <- c("RA17", "RA18", "RA22", "RA23")
+phen$C4_Pres <- with(phen, ifelse(phen$Site %in% C4Sites, "Y", "N"))
+
+```
+# Make basic plots
+```{r}
+# Break into different func groups
+largec3 <- phen[phen$Functional_Type=="Large C3",]
+smallc3 <- phen[phen$Functional_Type=="Small C3",]
+c4 <- phen[phen$Functional_Type=="C4",]
+forb <- phen[phen$Functional_Type=="Forb",]
+
+# # Make histograms of phenology
+# hist(largec3$Phenology_Stage)
+# hist(smallc3$Phenology_Stage)
+# hist(c4$Phenology_Stage)
+# hist(forb$Phenology_Stage)
+# 
+# # Make histograms of height
+# hist(largec3$Height)
+# hist(smallc3$Height)
+# hist(c4$Height)
+# hist(forb$Height)
+# 
+# # Make histograms of percent green
+# hist(largec3$Perc_Green)
+# hist(smallc3$Perc_Green)
+# hist(c4$Perc_Green)
+# hist(forb$Perc_Green)
+# 
+# # Make plots of phenology
+# phenlargec3 <- largec3 %>% count(DOY, Phenology_Stage)
+# ggplot(phenlargec3, aes(x=DOY, y=Phenology_Stage))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title = "large c3")
+# phensmallc3 <- smallc3 %>% count(Week, Phenology_Stage)
+# ggplot(phensmallc3, aes(x=Week, y = Phenology_Stage))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="small c3")
+# phenc4 <- c4 %>% count(Week, Phenology_Stage)
+# ggplot(phenc4, aes(x=Week, y = Phenology_Stage))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="c4")
+# phenforb <- forb %>% count(Week, Phenology_Stage)
+# ggplot(phenforb, aes(x=Week, y = Phenology_Stage))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="forb")
+# 
+# # Make plots of height
+# heightlargec3 <- largec3 %>% count(Week, Height)
+# ggplot(heightlargec3, aes(x=Week, y=Height))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title = "large c3")
+# heightsmallc3 <- smallc3 %>% count(Week, Height)
+# ggplot(heightsmallc3, aes(x=Week, y = Height))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="small c3")
+# heightc4 <- c4 %>% count(Week, Height)
+# ggplot(heightc4, aes(x=Week, y = Height))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="c4")
+# heightforb <- forb %>% count(Week, Height)
+# ggplot(heightforb, aes(x=Week, y = Height))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="forb")
+# 
+# # Make plots of perc green
+# greenlargec3 <- largec3 %>% count(DOY, Perc_Green)
+# ggplot(greenlargec3, aes(x=DOY, y=Perc_Green))+
+#   geom_point(aes(col=n), size = 2)+
+#   #stat_summary(aes(y = Perc_Green,group=1), fun.y=mean, colour="red", geom="line",group=1)+
+#   geom_smooth()+
+#   labs(title = "large c3")
+# greensmallc3 <- smallc3 %>% count(Week, Perc_Green)
+# ggplot(greensmallc3, aes(x=Week, y = Perc_Green))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="small c3")
+# greenc4 <- c4 %>% count(DOY, Perc_Green)
+# ggplot(greenc4, aes(x=DOY, y = Perc_Green))+
+#   geom_point(aes(col=n), size = 2)+
+#   stat_smooth()+
+#   labs(title="c4")
+# greenforb <- forb %>% count(Week, Perc_Green)
+# ggplot(greenforb, aes(x=Week, y = Perc_Green))+
+#   geom_point(aes(col=n), size = 2)+
+#   labs(title="forb")
+```
+
+#Make Boxplots
+```{r}
+# Set colors for plotting
+cols <- c("Large C3" = "#56B4E9", "Small C3" = "forestgreen", "C4" = "#E69F00", "Forb" = "#F0E442")
+# Set breaks
+my.breaks.minor <- c(120, 150, 180, 210)
+my.breaks.major <- c(90, 105, 135, 165, 195)
+my.breaks.comb <- sort(c(my.breaks.major, my.breaks.minor - 1.0E-6))
+month.label <- c(90, "\nApril", 120, "\nMay", 150, "\nJune", 180, 
+                "\nJuly", 210)
+
+# remove unnecessary columns
+justphen <- phen[,c(3,4,5,7,10,11,12,13)]
+# start looking at first dates of max biomass
+#large c3
+largec3maxbmass <- justphen[which(justphen$Phenology_Stage==5 & justphen$Functional_Type == "Large C3"),]
+uniquelargec3maxbmass <- largec3maxbmass %>% 
+  group_by(Plant_Obs) %>% 
+  filter(DOY == min(DOY)) %>% 
+  distinct
+uniquelargec3maxbmass <- as.data.frame(uniquelargec3maxbmass)
+#small c3
+smallc3maxbmass <- justphen[which(justphen$Phenology_Stage==5 & justphen$Functional_Type == "Small C3"),]
+uniquesmallc3maxbmass <- smallc3maxbmass %>% 
+  group_by(Plant_Obs) %>% 
+  filter(DOY == min(DOY)) %>% 
+  distinct
+uniquesmallc3maxbmass <- as.data.frame(uniquesmallc3maxbmass)
+#c4
+c4maxbmass <- justphen[which(justphen$Phenology_Stage==5 & justphen$Functional_Type == "C4"),]
+uniquec4maxbmass <- c4maxbmass %>% 
+  group_by(Plant_Obs) %>% 
+  filter(DOY == min(DOY)) %>% 
+  distinct
+uniquec4maxbmass <- as.data.frame(uniquec4maxbmass)
+#forb
+forbmaxbmass <- justphen[which(justphen$Phenology_Stage==5 & justphen$Functional_Type == "Forb"),]
+uniqueforbmaxbmass <- forbmaxbmass %>% 
+  group_by(Plant_Obs) %>% 
+  filter(DOY == min(DOY)) %>% 
+  distinct
+uniqueforbmaxbmass <- as.data.frame(uniqueforbmaxbmass)
+# combine unique max bmass
+allmaxbmass <- rbind(uniquelargec3maxbmass, uniquesmallc3maxbmass, uniquec4maxbmass, uniqueforbmaxbmass)
+
+
+# plot only the first date of 5
+maxbmassplot <- ggplot(allmaxbmass, aes(x = DOY, y = Functional_Type))+
+  geom_boxplot(aes(fill=Functional_Type))+
+  ggtitle("")+
+  scale_fill_manual(values = cols)+
+  #facet_wrap(~ C4_Pres)+
+  #xlab("Julian Day")+
+  ylab("Functional Type")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(fill="Functional Type")+
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+# all 5s
+
+
+
+
+# now look at first bud dates
+# #large c3
+# largec3bud <- justphen[which(justphen$Phenology_Stage==7 & justphen$Functional_Type == "large_C3"),]
+# #small c3
+# smallc3bud <- justphen[which(justphen$Phenology_Stage==7 & justphen$Functional_Type == "small_C3"),]
+# #c4
+# c4bud <- justphen[which(justphen$Phenology_Stage==7 & justphen$Functional_Type == "C4"),]
+# #forb
+# forbbud <- justphen[which(justphen$Phenology_Stage==7 & justphen$Functional_Type == "forb"),]
+# # combine bud date
+# allbud <- rbind(largec3bud, smallc3bud, c4bud, forbbud)
+
+# Plot first bud date
+firstbudplot<-ggplot(justphen[justphen$Phenology_Stage==7,], aes(x = DOY, y = Functional_Type))+
+  geom_boxplot(aes(fill=Functional_Type))+
+  ggtitle("")+
+  scale_fill_manual(values = cols)+
+  #facet_wrap(~ C4_Pres)+
+  #xlab("Julian Day")+
+  ylab("Functional Type")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(fill="Functional Type")+
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank())
+  
+
+# now look at first flower dates
+# #large c3
+# largec3flower <- justphen[which(justphen$Phenology_Stage==9 & justphen$Functional_Type == "large_C3"),]
+# #small c3
+# smallc3flower <- justphen[which(justphen$Phenology_Stage==9 & justphen$Functional_Type == "small_C3"),]
+# #c4
+# c4flower <- justphen[which(justphen$Phenology_Stage==9 & justphen$Functional_Type == "C4"),]
+# #forb
+# forbflower <- justphen[which(justphen$Phenology_Stage==9 & justphen$Functional_Type == "forb"),]
+# # combine bud date
+# allflower <- rbind(largec3flower, smallc3flower, c4flower, forbflower)
+
+# plot first flower
+firstflowerplot<-ggplot(justphen[justphen$Phenology_Stage==9,], aes(x = DOY, y = Functional_Type))+
+  geom_boxplot(aes(fill=Functional_Type))+
+  ggtitle("")+
+  scale_fill_manual(values = cols)+
+  #facet_wrap(~ C4_Pres)+
+  xlab("Day of Year (DOY)")+
+  ylab("Functional Type")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  #theme(legend.title=element_blank())+
+  theme(axis.title.y = element_blank())+
+  labs(fill="Functional Type")
+  # geom_signif(comparisons = list(c("Large C3", "Forb")), 
+  #             map_signif_level=TRUE)+
+  # geom_signif(comparisons = list(c("Large C3","Small C3")), 
+  #             map_signif_level=TRUE)+
+  # geom_signif(comparisons = list(c("Large C3","C4")), 
+  #             map_signif_level=TRUE)+
+  # geom_signif(comparisons = list(c("Small C3","Forb")), 
+  #             map_signif_level=TRUE)
+
+# put first date plots together
+allfirstdates <- ggarrange(maxbmassplot, firstbudplot,firstflowerplot, nrow = 3, ncol = 1, common.legend = T, legend = "bottom", labels = c("(A)", "(B)", "(C)"),align = "hv", vjust = 2)
+
+# ggsave("First_Dates_Plot_withMonth.png", plot=allfirstdates, device = "png",path = "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Figures/", width = 20, height = 20, units = "cm")
+```
+
+#Descriptive Stats on boxplots
+```{r}
+library(pastecs)
+#LC3 max bmass #mean 133.45, sd 9.76, n = 29
+format(stat.desc(allmaxbmass$DOY[which(allmaxbmass$Functional_Type=="Large C3")]), scientific = F)
+#sC3 max bmass #mean 115.71, sd 8.79, n = 68
+format(stat.desc(allmaxbmass$DOY[which(allmaxbmass$Functional_Type=="Small C3")]), scientific = F)
+#c4 max bmass #mean 181.69, sd 8.73, n = 32
+format(stat.desc(allmaxbmass$DOY[which(allmaxbmass$Functional_Type=="C4")]), scientific = F)
+#forb max bmass #mean 132.04, sd 14.07, n = 25
+format(stat.desc(allmaxbmass$DOY[which(allmaxbmass$Functional_Type=="Forb")]), scientific = F)
+
+#LC3 bud #mean 146.40, sd 6.28, n = 75
+format(stat.desc(firstbud$DOY[which(firstbud$Functional_Type=="Large C3")]), scientific = F)
+#sC3 bud #mean 130.03, sd 4.57, n = 58
+format(stat.desc(firstbud$DOY[which(firstbud$Functional_Type=="Small C3")]), scientific = F)
+#c4 bud #mean 190.62, sd 7.56, n = 21
+format(stat.desc(firstbud$DOY[which(firstbud$Functional_Type=="C4")]), scientific = F)
+#forb bud #mean 126.64, sd 15.19, n = 69
+format(stat.desc(firstbud$DOY[which(firstbud$Functional_Type=="Forb")]), scientific = F)
+
+#LC3 flower #mean 160.81, sd 11.48, n = 84
+format(stat.desc(firstflower$DOY[which(firstflower$Functional_Type=="Large C3")]), scientific = F)
+#sC3 flower #mean 143.58, sd 6.95, n = 59
+format(stat.desc(firstflower$DOY[which(firstflower$Functional_Type=="Small C3")]), scientific = F)
+#c4 flower #mean 198, sd 3.46, n = 3
+format(stat.desc(firstflower$DOY[which(firstflower$Functional_Type=="C4")]), scientific = F)
+#forb flower #mean 139.49, sd 16.21, n = 63
+format(stat.desc(firstflower$DOY[which(firstflower$Functional_Type=="Forb")]), scientific = F)
+```
+
+
+# Stats on boxplots
+```{r}
+# ANOVA on first date of peak biomass
+maxbmassmodel<- aov(DOY~Functional_Type, data=allmaxbmass)
+summary(maxbmassmodel)
+TukeyHSD(maxbmassmodel)
+
+# ANOVA on first buds
+firstbud<-justphen[justphen$Phenology_Stage==7,]
+firstbudmodel<- aov(DOY~Functional_Type, data=firstbud)
+summary(firstbudmodel)
+TukeyHSD(firstbudmodel)
+
+# ANOVA on first flower
+firstflower<-justphen[justphen$Phenology_Stage==9,]
+firstflowermodel<- aov(DOY~Functional_Type, data=firstflower)
+summary(firstflowermodel)
+TukeyHSD(firstflowermodel)
+
+# Check assumptions
+#Normal Quantile Plot
+nqp <- ggplot(data = maxbmassmodel, aes(sample = .resid)) +
+  stat_qq(color = "red") +
+  stat_qq_line(color = "blue") +
+  labs (x = "Theoretical Quantiles", y = "Residual", title = "Normal Probability Plot") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+#Histogram
+hist <- ggplot(data = maxbmassmodel, aes( x = .resid)) + 
+  geom_histogram(binwidth = 2.5, color = "black", fill = "steelblue3", bins = 30) +
+  labs (x = "Residual", y = "Frequency", title = "Histogram") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+#VersusFit
+vf <- ggplot(maxbmassmodel, aes(x = .fitted, y = .resid)) +
+  geom_point(color = "blue") +
+  labs(x="Fitted Value", y = "Residual Value", title = "Versus Fits") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+#VersusOrder
+vo <- ggplot(maxbmassmodel, aes(x = c(1:length(maxbmassmodel$residuals)), y = .resid)) +
+  geom_point(color = "blue") +
+  labs(x="Order of data", y = "Residual Value", title = "Versus Order") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+#Combining into one image
+ggarrange(nqp, vf, hist, vo, 
+          labels = c("A", "B", "C", "D"),
+          ncol = 2, nrow = 2)
+
+# ANOVA on first date of buds
+budmodel<- aov(DOY~Functional_Type, data=justphen[justphen$Phenology_Stage==7,])
+summary(budmodel)
+TukeyHSD(budmodel)
+# Check assumptions
+#Normal Quantile Plot
+nqp2 <- ggplot(data = budmodel, aes(sample = .resid)) +
+  stat_qq(color = "red") +
+  stat_qq_line(color = "blue") +
+  labs (x = "Theoretical Quantiles", y = "Residual", title = "Normal Probability Plot") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+#Histogram
+hist2 <- ggplot(data = budmodel, aes( x = .resid)) + 
+  geom_histogram(binwidth = 2.5, color = "black", fill = "steelblue3", bins = 30) +
+  labs (x = "Residual", y = "Frequency", title = "Histogram") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+#VersusFit
+vf2 <- ggplot(budmodel, aes(x = .fitted, y = .resid)) +
+  geom_point(color = "blue") +
+  labs(x="Fitted Value", y = "Residual Value", title = "Versus Fits") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+#VersusOrder
+vo2 <- ggplot(budmodel, aes(x = c(1:length(budmodel$residuals)), y = .resid)) +
+  geom_point(color = "blue") +
+  labs(x="Order of data", y = "Residual Value", title = "Versus Order") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+#Combining into one image
+ggarrange(nqp2, vf2, hist2, vo2, 
+          labels = c("A", "B", "C", "D"),
+          ncol = 2, nrow = 2)
+
+
+
+# ANOVA on first date of buds
+flowermodel<- aov(DOY~Functional_Type, data=justphen[justphen$Phenology_Stage==9,])
+summary(flowermodel)
+TukeyHSD(flowermodel)
+# Check assumptions
+#Normal Quantile Plot
+nqp3 <- ggplot(data = flowermodel, aes(sample = .resid)) +
+  stat_qq(color = "red") +
+  stat_qq_line(color = "blue") +
+  labs (x = "Theoretical Quantiles", y = "Residual", title = "Normal Probability Plot") + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+#Histogram
+hist3 <- ggplot(data = flowermodel, aes( x = .resid)) + 
+  geom_histogram(binwidth = 2.5, color = "black", fill = "steelblue3", bins = 30) +
+  labs (x = "Residual", y = "Frequency", title = "Histogram") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+
+#VersusFit
+vf3 <- ggplot(flowermodel, aes(x = .fitted, y = .resid)) +
+  geom_point(color = "blue") +
+  labs(x="Fitted Value", y = "Residual Value", title = "Versus Fits") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+#VersusOrder
+vo3 <- ggplot(flowermodel, aes(x = c(1:length(flowermodel$residuals)), y = .resid)) +
+  geom_point(color = "blue") +
+  labs(x="Order of data", y = "Residual Value", title = "Versus Order") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+#Combining into one image
+ggarrange(nqp3, vf3, hist3, vo3, 
+          labels = c("A", "B", "C", "D"),
+          ncol = 2, nrow = 2)
+```
+# Test any differences between sites with and without C4
+```{r}
+# check max bmass
+checkc4effectbmass <- allmaxbmass[!allmaxbmass$Functional_Type=="C4",]
+modeltest <- aov(DOY~Functional_Type * C4_Pres , data = checkc4effectbmass)
+summary(modeltest)
+TukeyHSD(modeltest)
+
+t.test(checkc4effectbmass$DOY[which(checkc4effectbmass$C4_Pres=="Y")],checkc4effectbmass$DOY[which(checkc4effectbmass$C4_Pres=="N")])
+
+# check first bud
+firstbud<-justphen[justphen$Phenology_Stage==7,]
+checkc4effectbud <- firstbud[!firstbud$Functional_Type=="C4",]
+t.test(checkc4effectbud$DOY[which(checkc4effectbud$C4_Pres=="Y")],checkc4effectbud$DOY[which(checkc4effectbud$C4_Pres=="N")])
+
+# check first flower
+firstflower<-justphen[justphen$Phenology_Stage==9,]
+checkc4effectflower <- firstflower[!firstflower$Functional_Type=="C4",]
+t.test(checkc4effectflower$DOY[which(checkc4effectflower$C4_Pres=="Y")],checkc4effectflower$DOY[which(checkc4effectflower$C4_Pres=="N")])
+
+#check percent green #is a difference, sites with C4 are greener
+c4check <- phen[!phen$Functional_Type=="C4",]
+t.test(c4check$Perc_Green[which(c4check$C4_Pres=="Y")],c4check$Perc_Green[which(c4check$C4_Pres=="N")])
+
+#check height #is a difference, sites with C4 are taller
+t.test(c4check$Height[which(c4check$C4_Pres=="Y")],c4check$Height[which(c4check$C4_Pres=="N")])
+
+```
+
+# Make line plots of height, phenology stage, and % green
+```{r}
+# Height
+heightplot <- ggplot(phen, aes(x=DOY, y = Height, color = Functional_Type))+
+  geom_smooth()+
+  scale_colour_manual(values = cols)+
+  ggtitle("")+
+  xlab("Day of Year (DOY)")+
+  ylab("Height (cm)")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(color="Functional Type")
+  #geom_vline(xintercept = 194)
+  
+largec3_height_gam_model <- gam(Height ~ s(DOY), data = phen[which(phen$Functional_Type=="Large C3"),])
+smallc3_height_gam_model <- gam(Height ~ s(DOY), data = phen[which(phen$Functional_Type=="Small C3"),])
+c4_height_gam_model <- gam(Height ~ s(DOY), data = phen[which(phen$Functional_Type=="C4"),])
+forb_height_gam_model <- gam(Height ~ s(DOY), data = phen[which(phen$Functional_Type=="Forb"),])
+
+
+
+# # Phenology
+# phenplot <- ggplot(phen, aes(x=DOY, y = Phenology_Stage, color = Functional_Type))+
+#   geom_smooth()+
+#   scale_colour_manual(values = cols)+
+#   ggtitle("")+
+#   xlab("Day of Year (DOY)")+
+#   ylab("Phenological Stage")+
+#   theme_bw(base_size = 15)+
+#   #xlim(90,210)+
+#   scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+#   labs(color="Functional Type")
+#   #theme(axis.title.x = element_blank())
+
+# Percent Green
+percgreenplot <- ggplot(phen[which(phen$Functional_Type=="Large C3"),], aes(x=DOY, y = Perc_Green, color = Functional_Type))+
+  geom_line()+
+  scale_colour_manual(values = cols)+
+  ggtitle("")+
+  xlab("Day of Year (DOY)")+
+  ylab("% Green Biomass")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(color="Functional Type")
+  #theme(axis.title.x = element_blank())
+  #geom_vline(xintercept = 170)
+
+largec3_green_gam_model <- gam(Perc_Green ~ s(DOY), data = phen[which(phen$Functional_Type=="Large C3"),])
+smallc3_green_gam_model <- gam(Perc_Green ~ s(DOY), data = phen[which(phen$Functional_Type=="Small C3"),])
+c4_green_gam_model <- gam(Perc_Green ~ s(DOY), data = phen[which(phen$Functional_Type=="C4"),])
+forb_green_gam_model <- gam(Perc_Green ~ s(DOY), data = phen[which(phen$Functional_Type=="Forb"),])
+
+
+### Go read in biomass data from that markdown
+# Plot biomass
+# bmassplot <- ggplot(bmass, aes(x=DOY, y = Total_Green_Biomass_per_Basal, color = Functional_Type))+
+#   geom_smooth()+
+#   scale_colour_manual(values = cols)+
+#   ggtitle("Green Biomass/Basal Area")+
+#   xlab("Julian Day")+
+#   ylab(expression("Green Biomass (g/cm"^2*")"))+
+#   theme_bw(base_size = 15)+
+#   xlim(110,180)+
+#   labs(color="Functional Type")
+  
+
+
+# # put plots together
+# allphenplots <- ggarrange(phenplot, percgreenplot,heightplot, nrow = 1, ncol = 3, common.legend = T, legend = "bottom", labels = c("(A)", "(B)", "(C)"),align = "hv", vjust = 2)
+# 
+# ggsave("Phen_Data_Plots_withMonth.png", plot=allphenplots, device = "png",path = "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Figures/", width = 25, height = 10, units = "cm")
+
+```
+
+# Updated plots for paper
+```{r}
+# Turn week to average DOY
+weekstats<-phen %>%
+  group_by(Week) %>%
+  summarize(mean = mean(DOY))
+weekstatdf <- as.data.frame(round(weekstats))
+colnames(weekstatdf) <- c("Week", "Avg_DOY")
+phen2 <- left_join(phen, weekstatdf, by="Week")
+
+# Create plot of Heights by Functional Type
+heighttimestats <- phen2[!is.na(phen2$Height),] %>%   
+  group_by(Avg_DOY, Functional_Type) %>%  
+  summarize(mean_height=mean(Height),  
+            sd_height=sd(Height),  
+            N_height=n(),  
+            se_height=sd_height/sqrt(N_height),  
+            upper_limit_height=mean_height+se_height,  
+            lower_limit_height=mean_height-se_height  
+  )  
+
+
+heightplot <- ggplot(heighttimestats, aes(x=Avg_DOY, y=mean_height, colors = Functional_Type)) +  
+  geom_ribbon(aes(y = mean_height, ymin=lower_limit_height, ymax=upper_limit_height, fill = Functional_Type), alpha = .5)+
+  geom_line(aes(color=Functional_Type), linewidth=0.8) +
+  scale_colour_manual(aesthetics = c("colour", "fill"),values = cols)+
+  ggtitle("")+
+  xlab("Day of Year (DOY)")+
+  ylab("Height (cm)")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(color="Functional Type", fill="Functional Type")
+
+
+
+# Create plot of Percent Green by Functional Type
+greentimestats <- phen2[!is.na(phen2$Perc_Green),] %>%   
+  group_by(Avg_DOY, Functional_Type) %>%  
+  summarize(mean_green=mean(Perc_Green),  
+            sd_green=sd(Perc_Green),  
+            N_green=n(),  
+            se_green=sd_green/sqrt(N_green),  
+            upper_limit_green=mean_green+se_green,  
+            lower_limit_green=mean_green-se_green  
+  )  
+
+
+percgreenplot <- ggplot(greentimestats, aes(x=Avg_DOY, y=mean_green)) +  
+  geom_ribbon(aes(ymin=lower_limit_green, ymax=upper_limit_green, fill = Functional_Type), alpha = .5)+
+  geom_line(aes(color=Functional_Type), linewidth=0.8) +
+  scale_color_manual(aesthetics = c("colour", "fill"),values = cols)+
+  ggtitle("")+
+  xlab("Day of Year (DOY)")+
+  ylab("% Green Biomass")+
+  theme_bw(base_size = 15)+
+  #xlim(90,210)+
+  scale_x_continuous(expand = c(0,0), limits = c(85,215), minor_breaks = my.breaks.minor, labels = month.label, breaks = my.breaks.comb)+
+  labs(color="Functional Type", fill = "Functional Type")
+
+# # put plots together
+allphenplots <- ggarrange(percgreenplot,heightplot, nrow = 1, ncol = 2, common.legend = T, legend = "bottom", labels = c("(A)", "(B)"),align = "hv", vjust = 2)
+# 
+ggsave("Phen_Data_Plots_withMonth_Updated.png", plot=allphenplots, device = "png",path = "C:/Users/ander/OneDrive - Yale University/Documents/Lauenroth_Lab/Paper_2_Figures/", width = 25, height = 10, units = "cm")
+```
+
+
+# Derivatives of line plots
+```{r}
+# Library
+require(splines)
+
+# large C3 derivative
+lmdf <- na.omit(largec3)
+model <- gam(Height~s(DOY,df=6),data = lmdf)
+
+X <- data.frame(DOY = sort(unique(lmdf$DOY))) # make an ordered sequence
+
+Y <- predict(model,newdata=X) # calculate predictions for that sequence
+plot(X$DOY,Y,type="l",main="Original fit") #check
+
+dY <- diff(Y)/diff(X$DOY)  # the derivative of your function
+dX <- rowMeans(embed(X$DOY,2)) # centers the X values for plotting
+plot(dX,dY,type="l",main="Derivative") #check
+
+
+#install.packages("gam")
+library(gam)
+gam(Height~s(DOY,df=6),data = na.omit(phen[phen$Functional_Type=="large_C3",]))
+```
+
